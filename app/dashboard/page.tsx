@@ -1,14 +1,55 @@
+"use client";
+
 import DashboardLayout from "@/components/dashboard-layout";
-import { MessageSquare, Database, Zap, ArrowUpRight } from "lucide-react";
+import { MessageSquare, Database, Zap, ArrowUpRight, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 import { motion } from "framer-motion";
 
-const stats = [
-    { name: "Total Leads/Chats", value: "1,284", icon: MessageSquare, trend: "+12%" },
-    { name: "Conocimiento (Chunks)", value: "542", icon: Database, trend: "+5" },
-    { name: "Automatizaciones", value: "3 Activas", icon: Zap, trend: "Estable" },
-];
-
 export default function DashboardPage() {
+    const [stats, setStats] = useState([
+        { name: "Total Leads/Chats", value: "0", icon: MessageSquare, trend: "..." },
+        { name: "Conocimiento (Chunks)", value: "0", icon: Database, trend: "..." },
+        { name: "Automatizaciones", value: "Activas", icon: Zap, trend: "Estable" },
+    ]);
+    const [recentChats, setRecentChats] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const supabase = createClient();
+
+    useEffect(() => {
+        async function fetchDashboardData() {
+            try {
+                // Fetch stats counts
+                const [convCount, knowledgeCount] = await Promise.all([
+                    supabase.from('conversations').select('*', { count: 'exact', head: true }),
+                    supabase.from('knowledge_items').select('*', { count: 'exact', head: true })
+                ]);
+
+                setStats([
+                    { name: "Total Leads/Chats", value: (convCount.count || 0).toString(), icon: MessageSquare, trend: "En tiempo real" },
+                    { name: "Conocimiento (Chunks)", value: (knowledgeCount.count || 0).toString(), icon: Database, trend: "Actualizado" },
+                    { name: "Automatizaciones", value: "3 Activas", icon: Zap, trend: "Estable" },
+                ]);
+
+                // Fetch recent conversations
+                const { data } = await supabase
+                    .from('conversations')
+                    .select('*, customers(name)')
+                    .order('created_at', { ascending: false })
+                    .limit(3);
+
+                setRecentChats(data || []);
+            } catch (err) {
+                console.error("Error fetching dashboard data:", err);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        fetchDashboardData();
+    }, [supabase]);
+
     return (
         <DashboardLayout>
             <div className="space-y-8">
@@ -31,7 +72,7 @@ export default function DashboardPage() {
                             </div>
                             <div className="mt-4">
                                 <p className="text-sm text-muted-foreground">{stat.name}</p>
-                                <p className="text-2xl font-bold">{stat.value}</p>
+                                <p className="text-2xl font-bold">{loading ? "..." : stat.value}</p>
                             </div>
                         </div>
                     ))}
@@ -42,19 +83,25 @@ export default function DashboardPage() {
                     <div className="glass-card">
                         <h3 className="text-lg font-semibold mb-4">Últimas Conversaciones</h3>
                         <div className="space-y-4">
-                            {[1, 2, 3].map((i) => (
-                                <div key={i} className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer group">
+                            {loading ? (
+                                <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+                            ) : recentChats.length === 0 ? (
+                                <p className="text-sm text-muted-foreground text-center py-4">No hay actividad reciente.</p>
+                            ) : recentChats.map((chat) => (
+                                <Link key={chat.id} href="/dashboard/conversations" className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer group">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-xs font-bold">
-                                            C{i}
+                                        <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-xs font-bold uppercase">
+                                            {chat.customers?.name?.[0] || "?"}
                                         </div>
                                         <div>
-                                            <p className="font-medium text-sm">Cliente #{i + 100}</p>
-                                            <p className="text-xs text-muted-foreground">Hace 5 minutos</p>
+                                            <p className="font-medium text-sm">{chat.customers?.name || "Cliente Desconocido"}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {new Date(chat.created_at).toLocaleDateString()} {new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </p>
                                         </div>
                                     </div>
                                     <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-white transition-colors" />
-                                </div>
+                                </Link>
                             ))}
                         </div>
                     </div>
@@ -63,9 +110,9 @@ export default function DashboardPage() {
                         <div className="relative z-10">
                             <h3 className="text-lg font-semibold mb-2">Agente RAG Optimizado</h3>
                             <p className="text-sm text-muted-foreground mb-4">Tu agente IA está usando la última base de datos vectorial para responder con precisión.</p>
-                            <button className="px-4 py-2 bg-white text-black rounded-lg font-medium text-sm hover:bg-white/90 transition-colors">
+                            <Link href="/dashboard/knowledge" className="inline-block px-4 py-2 bg-white text-black rounded-lg font-medium text-sm hover:bg-white/90 transition-colors">
                                 Ver Detalles
-                            </button>
+                            </Link>
                         </div>
                         <Zap className="absolute -right-8 -bottom-8 w-40 h-40 text-primary/10 rotate-12" />
                     </div>

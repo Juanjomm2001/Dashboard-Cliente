@@ -13,24 +13,39 @@ create table public.tenants (
 -- Enable RLS on Tenants
 alter table public.tenants enable row level security;
 
--- Create Profiles table (extending auth.users)
+-- Create Profiles table (The people who HAVE login access - Dashboard Operators)
 create table public.profiles (
   id uuid primary key references auth.users on delete cascade,
   tenant_id uuid references public.tenants(id),
   full_name text,
   avatar_url text,
-  role text default 'user',
+  role text default 'admin', -- Solo admins del tenant loguean
   updated_at timestamptz default now()
 );
 
 -- Enable RLS on Profiles
 alter table public.profiles enable row level security;
 
+-- Create Customers table (End-users who DON'T have login access)
+create table public.customers (
+  id uuid primary key default uuid_generate_v4(),
+  tenant_id uuid references public.tenants(id) on delete cascade,
+  external_id text not null, -- ID de WhatsApp, Web session, etc.
+  name text,
+  email text,
+  metadata jsonb default '{}'::jsonb,
+  created_at timestamptz default now(),
+  unique(tenant_id, external_id)
+);
+
+-- Enable RLS on Customers
+alter table public.customers enable row level security;
+
 -- Create Conversations table
 create table public.conversations (
   id uuid primary key default uuid_generate_v4(),
   tenant_id uuid references public.tenants(id) on delete cascade,
-  customer_name text,
+  customer_id uuid references public.customers(id) on delete cascade,
   messages jsonb not null default '[]'::jsonb,
   summary text,
   sentiment text,
@@ -61,6 +76,9 @@ create policy "Users can update their own profile" on public.profiles for update
 
 -- Other tables: Users can only see data from their tenant
 create policy "Users can view their tenant's data" on public.conversations 
+  for select using (tenant_id in (select tenant_id from public.profiles where id = auth.uid()));
+
+create policy "Users can view their tenant's customers" on public.customers 
   for select using (tenant_id in (select tenant_id from public.profiles where id = auth.uid()));
 
 create policy "Users can view their tenant's knowledge items" on public.knowledge_items 

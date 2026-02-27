@@ -1,17 +1,55 @@
 "use client";
 
 import DashboardLayout from "@/components/dashboard-layout";
-import { MessageSquare, User, Send, Search, Filter } from "lucide-react";
-import { useState } from "react";
+import { MessageSquare, User, Send, Search, Filter, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 
-const chats = [
-    { id: 1, name: "Empresa ABC", lastMsg: "¿Cómo puedo integrar el API?", time: "2m", status: "online" },
-    { id: 2, name: "Juan Domínguez", lastMsg: "Gracias por la información.", time: "1h", status: "offline" },
-    { id: 3, name: "Logística Global", lastMsg: "Tengo un problema con el login.", time: "3h", status: "online" },
-];
+interface Customer {
+    id: string;
+    name: string;
+    external_id: string;
+}
+
+interface Conversation {
+    id: string;
+    tenant_id: string;
+    customer_id: string;
+    messages: any[];
+    summary: string;
+    sentiment: string;
+    created_at: string;
+    customers: Customer;
+}
 
 export default function ConversationsPage() {
-    const [selectedChat, setSelectedChat] = useState(chats[0]);
+    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
+    const [loading, setLoading] = useState(true);
+    const supabase = createClient();
+
+    useEffect(() => {
+        async function fetchConversations() {
+            try {
+                const { data, error } = await supabase
+                    .from('conversations')
+                    .select('*, customers(*)')
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+                setConversations(data || []);
+                if (data && data.length > 0) {
+                    setSelectedChat(data[0]);
+                }
+            } catch (err) {
+                console.error("Error fetching conversations:", err);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        fetchConversations();
+    }, [supabase]);
 
     return (
         <DashboardLayout>
@@ -28,89 +66,93 @@ export default function ConversationsPage() {
                     </div>
 
                     <div className="glass-card p-2 flex-1 overflow-y-auto space-y-1">
-                        {chats.map((chat) => (
-                            <div
-                                key={chat.id}
-                                onClick={() => setSelectedChat(chat)}
-                                className={`p-3 rounded-xl cursor-pointer transition-all ${selectedChat.id === chat.id ? "bg-primary/20 border-primary/20" : "hover:bg-white/5 border-transparent"
-                                    } border`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className="relative">
-                                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center font-bold text-xs">
-                                            {chat.name[0]}
+                        {loading ? (
+                            <div className="flex items-center justify-center h-40">
+                                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                            </div>
+                        ) : conversations.length === 0 ? (
+                            <div className="p-4 text-center text-xs text-muted-foreground">
+                                No hay conversaciones aún.
+                            </div>
+                        ) : (
+                            conversations.map((chat) => (
+                                <div
+                                    key={chat.id}
+                                    onClick={() => setSelectedChat(chat)}
+                                    className={`p-3 rounded-xl cursor-pointer transition-all ${selectedChat?.id === chat.id ? "bg-primary/20 border-primary/20" : "hover:bg-white/5 border-transparent"
+                                        } border`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="relative">
+                                            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center font-bold text-xs uppercase">
+                                                {chat.customers?.name?.[0] || chat.customers?.external_id?.[0] || "?"}
+                                            </div>
                                         </div>
-                                        {chat.status === "online" && (
-                                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#030303] rounded-full" />
-                                        )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-baseline">
-                                            <p className="font-semibold text-sm truncate">{chat.name}</p>
-                                            <span className="text-[10px] text-muted-foreground">{chat.time}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-baseline">
+                                                <p className="font-semibold text-sm truncate">{chat.customers?.name || chat.customers?.external_id}</p>
+                                                <span className="text-[10px] text-muted-foreground">
+                                                    {new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground truncate">{chat.summary || "Sin resumen"}</p>
                                         </div>
-                                        <p className="text-xs text-muted-foreground truncate">{chat.lastMsg}</p>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))
+                        )}
                     </div>
                 </div>
 
                 {/* Chat View */}
                 <div className="flex-1 glass-card p-0 flex flex-col overflow-hidden">
-                    {/* Top Bar */}
-                    <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-sm text-primary">
-                                {selectedChat.name[0]}
+                    {selectedChat ? (
+                        <>
+                            {/* Top Bar */}
+                            <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-sm text-primary uppercase">
+                                        {selectedChat.customers?.name?.[0] || "?"}
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold">{selectedChat.customers?.name || "Cliente Desconocido"}</p>
+                                        <p className="text-xs text-muted-foreground">ID: {selectedChat.customers?.external_id}</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 text-xs font-medium px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-full">
+                                    {selectedChat.sentiment || "Neutral"}
+                                </div>
                             </div>
-                            <div>
-                                <p className="font-semibold">{selectedChat.name}</p>
-                                <p className="text-xs text-emerald-500">Agente AI respondiendo...</p>
-                            </div>
-                        </div>
-                        <div className="flex gap-2">
-                            <button className="p-2 hover:bg-white/5 rounded-lg text-muted-foreground border border-white/10">
-                                <Filter className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
 
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                        <div className="flex gap-3 max-w-[80%]">
-                            <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center">
-                                <User className="w-4 h-4" />
+                            {/* Messages */}
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                                {selectedChat.messages.map((msg, idx) => (
+                                    <div key={idx} className={`flex gap-3 max-w-[80%] ${msg.role === 'assistant' ? 'ml-auto flex-row-reverse' : ''}`}>
+                                        <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${msg.role === 'assistant' ? 'bg-primary text-white font-bold text-[10px]' : 'bg-white/10'}`}>
+                                            {msg.role === 'assistant' ? 'AI' : <User className="w-4 h-4" />}
+                                        </div>
+                                        <div className={`p-4 rounded-2xl text-sm leading-relaxed ${msg.role === 'assistant'
+                                                ? 'bg-primary text-white rounded-tr-none shadow-lg shadow-primary/20'
+                                                : 'bg-white/5 border border-white/10 rounded-tl-none'
+                                            }`}>
+                                            {msg.content}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                            <div className="bg-white/5 border border-white/10 p-4 rounded-2xl rounded-tl-none text-sm leading-relaxed">
-                                Hola, tengo una pregunta sobre cómo funciona vuestro sistema de automatización con n8n.
-                            </div>
-                        </div>
 
-                        <div className="flex gap-3 max-w-[80%] ml-auto flex-row-reverse">
-                            <div className="w-8 h-8 rounded-full bg-primary flex-shrink-0 flex items-center justify-center text-white font-bold text-[10px]">
-                                AI
+                            {/* Input placeholder */}
+                            <div className="p-4 bg-white/[0.02] border-t border-white/5">
+                                <p className="text-xs text-center text-muted-foreground italic">
+                                    El n8n Agent está gestionando esta conversación.
+                                </p>
                             </div>
-                            <div className="bg-primary text-white p-4 rounded-2xl rounded-tr-none text-sm leading-relaxed shadow-lg shadow-primary/20">
-                                ¡Hola! Claro, nuestro sistema utiliza n8n para conectar tus herramientas favoritas y procesar datos en tiempo real mediante agentes RAG. ¿En qué parte técnica te gustaría profundizar?
-                            </div>
+                        </>
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                            Selecciona una conversación para ver los detalles
                         </div>
-                    </div>
-
-                    {/* Input */}
-                    <div className="p-4 bg-white/[0.02] border-t border-white/5">
-                        <div className="relative">
-                            <input
-                                type="text"
-                                placeholder="Escribe un mensaje..."
-                                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:ring-1 focus:ring-primary transition-all shadow-inner"
-                            />
-                            <button className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary text-white rounded-xl hover:scale-105 transition-transform">
-                                <Send className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </DashboardLayout>
