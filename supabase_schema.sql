@@ -74,6 +74,20 @@ alter table public.knowledge_items enable row level security;
 create policy "Users can view their own profile" on public.profiles for select using (auth.uid() = id);
 create policy "Users can update their own profile" on public.profiles for update using (auth.uid() = id);
 
+-- Trigger to create a profile after signup
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, full_name, avatar_url)
+  values (new.id, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'avatar_url');
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
 -- Other tables: Users can only see data from their tenant
 create policy "Users can view their tenant's data" on public.conversations 
   for select using (tenant_id in (select tenant_id from public.profiles where id = auth.uid()));

@@ -37,3 +37,6 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_clave_anon_de_supabase
 1. **Base de Datos**: n8n se conectará directamente a tu base de datos de Supabase (PostgreSQL) para leer/escribir en `conversations` y `knowledge_items`.
 2. **Webhooks**: El botón de "Subir Archivo" en el Dashboard enviará una señal (webhook) a n8n para que procese el archivo, lo vectorice y lo guarde en Supabase.
 3. **Multi-tenancy**: Es vital que n8n siempre guarde el `tenant_id` correcto para que cada cliente solo vea sus propios datos.
+
+
+Para correrlo:  npm run dev

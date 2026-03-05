@@ -1,7 +1,7 @@
 -- 1. Insertar un Cliente de prueba (Tenant)
 -- Ejecuta esto primero en el SQL Editor de Supabase
 insert into public.tenants (name, slug) 
-values ('Mi Primer Cliente', 'cliente-test')
+values ('Peluquerias paqui', 'paqui')
 returning id;
 
 -- 2. Vincular usuario (IMPORTANTE)
@@ -12,7 +12,7 @@ returning id;
 -- 3. Insertar un Cliente Final (El usuario que no tiene acceso al dashboard)
 insert into public.customers (tenant_id, external_id, name)
 values (
-  (select id from public.tenants where slug = 'cliente-test' limit 1),
+  (select id from public.tenants where slug = 'paqui' limit 1),
   'WA-123456', -- ID externo (ej: WhatsApp)
   'Pepito Grillo'
 )
@@ -21,9 +21,9 @@ returning id;
 -- 4. Insertar una conversación de prueba vinculada a ese customer
 insert into public.conversations (tenant_id, customer_id, messages, summary, sentiment)
 values (
-  (select id from public.tenants where slug = 'cliente-test' limit 1), 
+  (select id from public.tenants where slug = 'paqui' limit 1), 
   (select id from public.customers where external_id = 'WA-123456' limit 1),
-  '[{"role": "user", "content": "Hola, ¿que tal?"}, {"role": "assistant", "content": "Hola! Soy tu asistente IA de Mi Primer Cliente."}]'::jsonb,
+  '[{"role": "user", "content": "Hola, ¿que tal?"}, {"role": "assistant", "content": "Hola! Soy tu asistente IA de Peluquerias paqui."}]'::jsonb,
   'Consulta inicial sobre servicios',
   'positivo'
 );
