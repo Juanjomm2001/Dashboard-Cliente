@@ -2,13 +2,13 @@
 
 import DashboardLayout from "@/components/dashboard-layout";
 import { Upload, FileText, CheckCircle, Clock, AlertCircle, Database, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 interface KnowledgeItem {
     id: string;
     name: string;
-    status: 'processing' | 'completed' | 'error';
+    status: "processing" | "completed" | "error" | "deleted";
     created_at: string;
     chunk_count: number;
 }
@@ -17,17 +17,29 @@ export default function KnowledgePage() {
     const [isUploading, setIsUploading] = useState(false);
     const [items, setItems] = useState<KnowledgeItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const supabase = createClient();
 
     const fetchItems = async () => {
         try {
             const { data, error } = await supabase
                 .from('knowledge_items')
-                .select('*')
+                .select('id, filename, status, created_at, metadata')
+                .neq("status", "deleted")
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            setItems(data || []);
+
+            const mappedItems: KnowledgeItem[] = (data || []).map((row: any) => ({
+                id: row.id,
+                name: row.filename,
+                status: row.status,
+                created_at: row.created_at,
+                chunk_count: row.metadata?.chunk_count ?? 0,
+            }));
+
+            setItems(mappedItems);
         } catch (err) {
             console.error("Error fetching knowledge items:", err);
         } finally {
@@ -39,14 +51,69 @@ export default function KnowledgePage() {
         fetchItems();
     }, [supabase]);
 
-    const handleUpload = () => {
+    const handleUploadClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const uploadFile = async (file: File) => {
         setIsUploading(true);
-        // Aquí es donde n8n entraría en juego
-        // Simulamos una inserción para ver el cambio visual
-        setTimeout(() => {
+
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const response = await fetch("/api/knowledge-items", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!response.ok) {
+                console.error("Error uploading knowledge item:", await response.text());
+            }
+
+            await fetchItems();
+        } catch (err) {
+            console.error("Error uploading knowledge item:", err);
+        } finally {
             setIsUploading(false);
-            fetchItems();
-        }, 2000);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
+        }
+    };
+
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        await uploadFile(file);
+    };
+
+    const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDragging(false);
+
+        if (isUploading) return;
+
+        const file = event.dataTransfer.files?.[0];
+        if (!file) return;
+        await uploadFile(file);
+    };
+
+    const handleDelete = async (id: string) => {
+        try {
+            const response = await fetch(`/api/knowledge-items?id=${id}`, {
+                method: "DELETE",
+            });
+
+            if (!response.ok) {
+                console.error("Error deleting knowledge item:", await response.text());
+            }
+
+            await fetchItems();
+        } catch (err) {
+            console.error("Error deleting knowledge item:", err);
+        }
     };
 
     return (
@@ -58,7 +125,7 @@ export default function KnowledgePage() {
                         <p className="text-muted-foreground">Gestiona el conocimiento que usa tu IA para responder.</p>
                     </div>
                     <button
-                        onClick={handleUpload}
+                        onClick={handleUploadClick}
                         disabled={isUploading}
                         className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-all disabled:opacity-50"
                     >
@@ -68,15 +135,45 @@ export default function KnowledgePage() {
                 </div>
 
                 <div className="grid gap-6">
-                    {/* Dropzone mockup */}
+                    {/* Input de archivo oculto para subir PDFs */}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf,.txt,.doc,.docx"
+                        className="hidden"
+                        onChange={handleFileChange}
+                    />
+
+                    {/* Dropzone */}
                     <div
-                        onClick={handleUpload}
-                        className="glass-card border-dashed border-2 border-white/10 flex flex-col items-center justify-center py-12 text-center group cursor-pointer hover:border-primary/50 transition-colors"
+                        onClick={handleUploadClick}
+                        onDragEnter={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDragging(true);
+                        }}
+                        onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDragging(true);
+                        }}
+                        onDragLeave={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDragging(false);
+                        }}
+                        onDrop={handleDrop}
+                        className={[
+                            "glass-card border-dashed border-2 flex flex-col items-center justify-center py-12 text-center group cursor-pointer transition-colors",
+                            isDragging ? "border-primary/70 bg-primary/5" : "border-white/10 hover:border-primary/50",
+                        ].join(" ")}
                     >
                         <div className="p-4 bg-primary/10 rounded-full mb-4 group-hover:scale-110 transition-transform">
                             {isUploading ? <Loader2 className="w-8 h-8 text-primary animate-spin" /> : <Upload className="w-8 h-8 text-primary" />}
                         </div>
-                        <p className="font-semibold text-lg">Arrastra archivos aquí</p>
+                        <p className="font-semibold text-lg">
+                            {isDragging ? "Suelta el archivo para subirlo" : "Arrastra un archivo aquí o haz clic para seleccionar"}
+                        </p>
                         <p className="text-sm text-muted-foreground">PDF, TXT o DOCX (Máx. 10MB)</p>
                     </div>
 
@@ -99,18 +196,19 @@ export default function KnowledgePage() {
                                         <th className="px-6 py-4 font-semibold">Estado</th>
                                         <th className="px-6 py-4 font-semibold text-center">Fragmentos</th>
                                         <th className="px-6 py-4 font-semibold text-right">Fecha</th>
+                                        <th className="px-6 py-4 font-semibold text-right">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
                                     {loading ? (
                                         <tr>
-                                            <td colSpan={4} className="px-6 py-12 text-center">
+                                            <td colSpan={5} className="px-6 py-12 text-center">
                                                 <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
                                             </td>
                                         </tr>
                                     ) : items.length === 0 ? (
                                         <tr>
-                                            <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground italic">
+                                            <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic">
                                                 No hay documentos subidos aún. Prueba a subir uno.
                                             </td>
                                         </tr>
@@ -139,12 +237,31 @@ export default function KnowledgePage() {
                                                             <AlertCircle className="w-4 h-4" /> Error en n8n
                                                         </div>
                                                     )}
+                                                    {item.status === "deleted" && (
+                                                        <div className="flex items-center gap-1.5 text-muted-foreground text-xs font-medium">
+                                                            Eliminado
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
                                                     <span className="text-xs bg-white/5 px-2 py-1 rounded-md">{item.chunk_count || 0}</span>
                                                 </td>
                                                 <td className="px-6 py-4 text-right text-sm text-muted-foreground">
-                                                    {new Date(item.created_at).toLocaleDateString()}
+                                                    {new Date(item.created_at).toLocaleString(undefined, {
+                                                        year: "numeric",
+                                                        month: "2-digit",
+                                                        day: "2-digit",
+                                                        hour: "2-digit",
+                                                        minute: "2-digit",
+                                                    })}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button
+                                                        onClick={() => handleDelete(item.id)}
+                                                        className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                                                    >
+                                                        Eliminar
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))
