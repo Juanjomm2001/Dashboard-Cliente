@@ -1,7 +1,7 @@
 "use client";
 
 import DashboardLayout from "@/components/dashboard-layout";
-import { MessageSquare, Database, Zap, ArrowUpRight, Loader2 } from "lucide-react";
+import { MessageSquare, Database, Zap, ArrowUpRight, Loader2, Users } from "lucide-react";
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -21,23 +21,24 @@ export default function DashboardPage() {
         async function fetchDashboardData() {
             try {
                 // Fetch stats counts
-                const [convCount, knowledgeCount] = await Promise.all([
+                const [convCount, knowledgeCount, customersCount] = await Promise.all([
                     supabase.from('conversations').select('*', { count: 'exact', head: true }),
-                    supabase.from('knowledge_items').select('*', { count: 'exact', head: true })
+                    supabase.from('knowledge_items').select('*', { count: 'exact', head: true }),
+                    supabase.from('customers').select('*', { count: 'exact', head: true })
                 ]);
 
                 setStats([
-                    { name: "Total Leads/Chats", value: (convCount.count || 0).toString(), icon: MessageSquare, trend: "En tiempo real" },
-                    { name: "Conocimiento (Chunks)", value: (knowledgeCount.count || 0).toString(), icon: Database, trend: "Actualizado" },
-                    { name: "Automatizaciones", value: "3 Activas", icon: Zap, trend: "Estable" },
+                    { name: "Total Mensajes", value: (convCount.count || 0).toString(), icon: MessageSquare, trend: "Activo" },
+                    { name: "Documentos RAG", value: (knowledgeCount.count || 0).toString(), icon: Database, trend: "Indexado" },
+                    { name: "Total Clientes", value: (customersCount.count || 0).toString(), icon: Users, trend: "Creciendo" },
                 ]);
 
-                // Fetch recent conversations
+                // Fetch recent conversations (flat table format)
                 const { data } = await supabase
                     .from('conversations')
-                    .select('*, customers(name)')
+                    .select('*')
                     .order('created_at', { ascending: false })
-                    .limit(3);
+                    .limit(4);
 
                 setRecentChats(data || []);
             } catch (err) {
@@ -90,17 +91,24 @@ export default function DashboardPage() {
                             ) : recentChats.map((chat) => (
                                 <Link key={chat.id} href="/dashboard/conversations" className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer group">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-xs font-bold uppercase">
-                                            {chat.customers?.name?.[0] || "?"}
+                                        <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-xs font-bold text-white uppercase shadow-sm">
+                                            {chat.first_name?.[0] || "?"}
                                         </div>
-                                        <div>
-                                            <p className="font-medium text-sm">{chat.customers?.name || "Cliente Desconocido"}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {new Date(chat.created_at).toLocaleDateString()} {new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-medium text-sm text-white truncate max-w-[130px]">
+                                                    {chat.first_name || "Cliente"} {chat.last_name || ""}
+                                                </p>
+                                                <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                                    {new Date(chat.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                                {chat.role === 'assistant' ? 'AI: ' : ''}{chat.content}
                                             </p>
                                         </div>
                                     </div>
-                                    <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-white transition-colors" />
+                                    <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-white transition-colors flex-shrink-0" />
                                 </Link>
                             ))}
                         </div>

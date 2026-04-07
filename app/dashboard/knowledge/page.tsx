@@ -10,7 +10,6 @@ interface KnowledgeItem {
     name: string;
     status: "processing" | "completed" | "error" | "deleted";
     created_at: string;
-    chunk_count: number;
 }
 
 export default function KnowledgePage() {
@@ -36,7 +35,6 @@ export default function KnowledgePage() {
                 name: row.filename,
                 status: row.status,
                 created_at: row.created_at,
-                chunk_count: row.metadata?.chunk_count ?? 0,
             }));
 
             setItems(mappedItems);
@@ -49,6 +47,25 @@ export default function KnowledgePage() {
 
     useEffect(() => {
         fetchItems();
+
+        // Suscribirse a los cambios en tiempo real de la tabla knowledge_items
+        // Así, cuando n8n cambie el status a 'completed', la UI se refrescará sola.
+        const channel = supabase
+            .channel('knowledge_items_updates')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'knowledge_items' },
+                (payload) => {
+                    console.log("Cambio detectado por n8n:", payload);
+                    fetchItems(); // Recarga la lista para mostrar el nuevo estado
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [supabase]);
 
     const handleUploadClick = () => {
@@ -194,7 +211,6 @@ export default function KnowledgePage() {
                                     <tr className="bg-white/5 text-muted-foreground text-xs uppercase tracking-wider">
                                         <th className="px-6 py-4 font-semibold">Archivo</th>
                                         <th className="px-6 py-4 font-semibold">Estado</th>
-                                        <th className="px-6 py-4 font-semibold text-center">Fragmentos</th>
                                         <th className="px-6 py-4 font-semibold text-right">Fecha</th>
                                         <th className="px-6 py-4 font-semibold text-right">Acciones</th>
                                     </tr>
@@ -208,7 +224,7 @@ export default function KnowledgePage() {
                                         </tr>
                                     ) : items.length === 0 ? (
                                         <tr>
-                                            <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic">
+                                            <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground italic">
                                                 No hay documentos subidos aún. Prueba a subir uno.
                                             </td>
                                         </tr>
@@ -242,9 +258,6 @@ export default function KnowledgePage() {
                                                             Eliminado
                                                         </div>
                                                     )}
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className="text-xs bg-white/5 px-2 py-1 rounded-md">{item.chunk_count || 0}</span>
                                                 </td>
                                                 <td className="px-6 py-4 text-right text-sm text-muted-foreground">
                                                     {new Date(item.created_at).toLocaleString(undefined, {

@@ -55,7 +55,9 @@ export async function POST(request: Request) {
     }
 
     const bucket = "knowledge-items";
-    const filePath = `${tenantId}/${Date.now()}-${file.name}`;
+    // Sanitize filename: replace spaces and special characters with underscores, keep alphanumeric and dots
+    const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9.\-]/g, "_");
+    const filePath = `${tenantId}/${Date.now()}-${sanitizedFilename}`;
 
     const { error: uploadError } = await supabase.storage
       .from(bucket)
@@ -114,7 +116,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ item: inserted }, { status: 201 });
   } catch (error: any) {
     console.error("Error en POST /api/knowledge-items:", error);
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
+    return NextResponse.json({ error: "Error interno del servidor", details: error.message }, { status: 500 });
   }
 }
 
@@ -155,13 +157,16 @@ export async function DELETE(request: Request) {
       await supabase.storage.from("knowledge-items").remove([storagePath]);
     }
 
-    const { error: updateError } = await supabase
+    // 3. Borramos el registro de la tabla knowledge_items
+    // Gracias al trigger 'ON DELETE CASCADE' que configuramos en 'documents_setup.sql',
+    // esto borrará automáticamente todos sus vectores asociados en la tabla 'documents'.
+    const { error: deleteError } = await supabase
       .from("knowledge_items")
-      .update({ status: "deleted" })
+      .delete()
       .eq("id", id);
 
-    if (updateError) {
-      return NextResponse.json({ error: "Error actualizando estado del conocimiento", details: updateError.message }, { status: 500 });
+    if (deleteError) {
+      return NextResponse.json({ error: "Error eliminando el conocimiento", details: deleteError.message }, { status: 500 });
     }
 
     const webhookUrl = process.env.N8N_KNOWLEDGE_WEBHOOK_URL;

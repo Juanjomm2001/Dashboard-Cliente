@@ -8,6 +8,7 @@ import {
     Settings,
     LogOut,
     User,
+    Users,
     ChevronRight,
     Menu,
     X
@@ -27,6 +28,7 @@ function cn(...inputs: ClassValue[]) {
 const navItems = [
     { name: "Resumen", href: "/dashboard", icon: BarChart3 },
     { name: "Conversaciones", href: "/dashboard/conversations", icon: MessageSquare },
+    { name: "Clientes", href: "/dashboard/customers", icon: Users },
     { name: "Agente RAG", href: "/dashboard/knowledge", icon: Database },
     { name: "Configuración", href: "/dashboard/settings", icon: Settings },
 ];
@@ -56,9 +58,11 @@ export default function DashboardLayout({
                         .single();
 
                     if (data) {
+                        const tData = data.tenants as any;
+                        const tenantName = Array.isArray(tData) ? tData[0]?.name : tData?.name;
                         setUserProfile({
                             full_name: data.full_name,
-                            tenant_name: (data.tenants as any)?.name || "Sin Empresa",
+                            tenant_name: tenantName || "Aún sin empresa vinculada",
                         });
                     }
                 }
@@ -85,8 +89,8 @@ export default function DashboardLayout({
                 className="glass border-r border-white/5 flex flex-col z-50 sticky top-0 h-screen"
             >
                 <div className="p-6 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-lg">
-                        A
+                    <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-lg text-white">
+                        B
                     </div>
                     {isSidebarOpen && (
                         <motion.span
@@ -94,7 +98,7 @@ export default function DashboardLayout({
                             animate={{ opacity: 1 }}
                             className="font-bold text-xl tracking-tight"
                         >
-                            AI Agency
+                            Babieca
                         </motion.span>
                     )}
                 </div>
