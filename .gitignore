@@ -49,3 +49,4 @@ next-env.d.ts
 ORDEN CORRER.txt
 n8n_*.json
 *_workflow*.json
+*.sql
